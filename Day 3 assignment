@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes Toolkit</title>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <h1>Notes Toolkit</h1>
+  <p>Open the Console to see the results.</p>
+</body>
+</html>
+// Starting Data
+let notes = [
+  { id: 1, text: "Buy milk and bread", category: "personal" },
+  { id: 2, text: "Finish the Day 3 assignment", category: "study" },
+  { id: 3, text: "Email the project report to Grace", category: "work" },
+  { id: 4, text: "Revise JavaScript arrays", category: "study" },
+  { id: 5, text: "Call mum", category: "personal" },
+];
+
+// 1. searchNotes(word)
+function searchNotes(word) {
+  const searchTerm = word.toLowerCase();
+  return notes.filter((note) => note.text.toLowerCase().includes(searchTerm));
+}
+
+// 2. longestNote()
+function longestNote() {
+  if (notes.length === 0) return null;
+
+  return notes.reduce((longest, current) => {
+    return current.text.length > longest.text.length ? current : longest;
+  });
+}
+
+// 3. countByCategory()
+function countByCategory() {
+  const counts = {};
+  for (const note of notes) {
+    counts[note.category] = (counts[note.category] || 0) + 1;
+  }
+  return counts;
+}
+
+// 4. getSummary()
+function getSummary() {
+  const total = notes.length;
+  const word = total === 1 ? "note" : "notes";
+  const counts = countByCategory();
+
+  const parts = [];
+  for (const category in counts) {
+    parts.push(`${counts[category]} ${category}`);
+  }
+
+  return `${total} ${word}: ${parts.join(", ")}.`;
+}
+
+// 5. isDuplicate(text)
+function isDuplicate(text) {
+  const formattedInput = text.trim().toLowerCase();
+  return notes.some(
+    (note) => note.text.trim().toLowerCase() === formattedInput
+  );
+}
+
+// 6. addNote(text, category)
+function addNote(text, category) {
+  const validCategories = ["personal", "work", "study"];
+  const trimmedText = text.trim();
+
+  if (trimmedText.length < 1 || trimmedText.length > 200) {
+    console.log("Failed to add: Text length must be between 1 and 200 characters.");
+    return false;
+  }
+
+  if (!validCategories.includes(category)) {
+    console.log(`Failed to add: Invalid category "${category}". Must be personal, work, or study.`);
+    return false;
+  }
+
+  if (isDuplicate(text)) {
+    console.log("Failed to add: Duplicate note already exists.");
+    return false;
+  }
+
+  const newNote = {
+    id: notes.length > 0 ? Math.max(...notes.map((n) => n.id)) + 1 : 1,
+    text: trimmedText,
+    category: category,
+  };
+
+  notes.push(newNote);
+  return true;
+}
+
+// ==========================================
+// TESTS & CONSOLE LOGS
+// ==========================================
+
+console.log("--- 1. searchNotes ---");
+console.log(searchNotes("javascript")); 
+// Expected output: [{ id: 4, text: "Revise JavaScript arrays", category: "study" }]
+
+console.log(searchNotes("python")); 
+// Expected output: []
+
+console.log("--- 2. longestNote ---");
+console.log(longestNote()); 
+// Expected output: { id: 3, text: "Email the project report to Grace", category: "work" }
+
+// Edge case for empty array test
+const tempNotes = notes;
+notes = [];
+console.log(longestNote()); 
+// Expected output: null
+notes = tempNotes; // Restore original array
+
+console.log("--- 3. countByCategory ---");
+console.log(countByCategory()); 
+// Expected output: { personal: 2, study: 2, work: 1 }
+
+// Edge case with custom single array
+const originalNotes = [...notes];
+notes = [{ id: 1, text: "Test note", category: "work" }];
+console.log(countByCategory()); 
+// Expected output: { work: 1 }
+notes = [...originalNotes]; // Restore array
+
+console.log("--- 4. getSummary ---");
+console.log(getSummary()); 
+// Expected output: "5 notes: personal 2, study 2, work 1." (or order of keys)
+
+// Edge case with 1 note
+notes = [{ id: 1, text: "Only one", category: "personal" }];
+console.log(getSummary()); 
+// Expected output: "1 note: personal 1."
+notes = [...originalNotes]; // Restore array
+
+console.log("--- 5. isDuplicate ---");
+console.log(isDuplicate("  Call mum  ")); 
+// Expected output: true
+
+console.log(isDuplicate("Call dad")); 
+// Expected output: false
+
+console.log("--- 6. addNote ---");
+console.log(addNote("Prepare presentation", "work")); 
+// Expected output: true
+
+console.log(addNote("Call mum", "personal")); 
+// Expected output: Failed to add: Duplicate note already exists. -> false
+
+console.log(addNote("", "study")); 
+// Expected output: Failed to add: Text length must be between 1 and 200 characters. -> false
+
+console.log(addNote("Shopping", "groceries")); 
+// Expected output: Failed to add: Invalid category "groceries". Must be personal, work, or study. -> false
