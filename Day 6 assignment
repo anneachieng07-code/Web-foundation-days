@@ -1,0 +1,121 @@
+-- Enable foreign key constraints in SQLite
+PRAGMA foreign_keys = ON;
+
+-- ==========================================
+-- 1. CREATE TABLES
+-- ==========================================
+
+-- Students Table
+CREATE TABLE students (
+    student_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE
+);
+
+-- Courses Table
+CREATE TABLE courses (
+    course_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_name TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE
+);
+
+-- Enrolments Table (Junction / Join Table)
+CREATE TABLE enrolments (
+    enrolment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    course_id INTEGER NOT NULL,
+    grade TEXT,
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE,
+    UNIQUE (student_id, course_id) -- Rule preventing duplicate enrollments
+);
+
+-- ==========================================
+-- 2. INSERT SAMPLE DATA
+-- ==========================================
+
+-- Insert 4 Students (3 enrolled, 1 without enrolments)
+INSERT INTO students (name, email) VALUES
+('Alice Johnson', 'alice@example.com'),
+('Bob Smith', 'bob@example.com'),
+('Charlie Brown', 'charlie@example.com'),
+('Diana Prince', 'diana@example.com'); -- No enrollments for testing
+
+-- Insert 3 Courses
+INSERT INTO courses (course_name, code) VALUES
+('Introduction to Computer Science', 'CS101'),
+('Database Systems', 'CS201'),
+('Web Development Fundamentals', 'CS301');
+
+-- Insert 5 Enrolments
+INSERT INTO enrolments (student_id, course_id, grade) VALUES
+(1, 1, 'A'),   -- Alice in CS101
+(1, 2, 'B+'),  -- Alice in CS201
+(2, 1, 'B'),   -- Bob in CS101
+(2, 3, 'A-'),  -- Bob in CS301
+(3, 2, 'A');   -- Charlie in CS201
+
+-- ==========================================
+-- 3. FIVE REQUIRED QUERIES
+-- ==========================================
+
+-- Query 1: All courses for one student (by name)
+SELECT c.course_name, c.code, e.grade
+FROM courses c
+JOIN enrolments e ON c.course_id = e.course_id
+JOIN students s ON e.student_id = s.student_id
+WHERE s.name = 'Alice Johnson';
+
+-- Query 2: All students on one course (e.g., Database Systems)
+SELECT s.name, s.email, e.grade
+FROM students s
+JOIN enrolments e ON s.student_id = e.student_id
+JOIN courses c ON e.course_id = c.course_id
+WHERE c.course_name = 'Database Systems';
+
+-- Query 3: The number of students per course
+SELECT c.course_name, COUNT(e.student_id) AS student_count
+FROM courses c
+LEFT JOIN enrolments e ON c.course_id = e.course_id
+GROUP BY c.course_id, c.course_name;
+
+-- Query 4: Students who have no enrolments
+SELECT s.student_id, s.name, s.email
+FROM students s
+LEFT JOIN enrolments e ON s.student_id = e.student_id
+WHERE e.enrolment_id IS NULL;
+
+-- Query 5: Update one enrolment's grade
+UPDATE enrolments
+SET grade = 'A+'
+WHERE student_id = (SELECT student_id FROM students WHERE name = 'Bob Smith')
+  AND course_id = (SELECT course_id FROM courses WHERE code = 'CS101');
+# School Database Design & Architecture
+
+## 1. Table Explanations & Entity Overview
+
+* **`students`**: Stores core information about individual students registered in the school. Columns include `student_id` (Primary Key), `name`, and `email` (Unique).
+* **`courses`**: Stores details of academic courses offered by the institution. Columns include `course_id` (Primary Key), `course_name`, and `code` (Unique course identifier).
+* **`enrolments`**: Acts as a junction table representing the academic enrollment relationship between a student and a course, along with the student's assigned `grade`.
+
+---
+
+## 2. Database Relationships & Join Table Rationale
+
+* **`students` to `enrolments` (One-to-Many):** One student can register for multiple course enrollments, but each individual enrollment record belongs to exactly one student.
+* **`courses` to `enrolments` (One-to-Many):** One course can have many student enrollments, but each enrollment record corresponds to exactly one course.
+* **`students` to `courses` (Many-to-Many):** A student can enroll in multiple courses, and a single course can contain multiple students.
+
+### Why a Join Table is Needed
+Relational databases cannot directly implement a Many-to-Many relationship without violating normalization rules (such as storing arrays or comma-separated lists of IDs, which breaks First Normal Form). The `enrolments` join table breaks the Many-to-Many relationship down into two manageable One-to-Many relationships while securely holding relationship-specific attributes like `grade`.
+
+---
+
+## 3. Performance Optimization (Index Recommendation)
+
+* **Recommended Index:** `CREATE INDEX idx_enrolments_student_id ON enrolments(student_id);`
+* **Reasoning:** In student portal dashboards or academic reporting, looking up all courses taken by a specific student (`WHERE student_id = ?`) is a highly frequent operation. Adding an index on `enrolments.student_id` replaces costly full-table scans with fast $O(\log N)$ binary tree lookups as the dataset grows large.
+
+---
+
+## 4. Architectural Choice: SQL vs. NoSQL
