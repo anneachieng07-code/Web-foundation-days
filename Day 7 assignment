@@ -1,0 +1,57 @@
+# System Design & Scaling Plan for SnapShare
+
+## 1. Assumptions & Daily Active Users (DAU)
+
+### Base Starting Facts
+* Registered Users: 10,000,000 (10 Million)
+* Daily Active User Rate: 10%
+* Activity per DAU: 1 photo upload/day, 50 feed views/day
+* Photo Sizes: Original photo = 2 MB, Thumbnail = 50 KB (0.05 MB)
+* Time Standards: 1 day = 86,400 seconds, 1 year = 365 days
+
+### Daily Active Users Calculation
+DAU = 10,000,000 × 0.10 = 1,000,000 Daily Active Users
+
+---
+
+## 2. Traffic & Storage Calculations
+
+### Uploads Per Second
+* Total Daily Uploads = 1,000,000 DAU × 1 upload/day = 1,000,000 uploads/day
+* Average Uploads/sec = 1,000,000 / 86,400 ≈ 11.57 uploads/sec
+* Peak Uploads/sec (5× peak) = 11.57 × 5 ≈ 57.87 uploads/sec
+
+### Feed Views Per Second
+* Total Daily Feed Views = 1,000,000 DAU × 50 views/day = 50,000,000 views/day
+* Average Feed Views/sec = 50,000,000 / 86,400 ≈ 578.7 views/sec
+* Peak Feed Views/sec (5× peak) = 578.7 × 5 ≈ 2,893.5 views/sec
+
+### Photo Storage Per Year
+* Storage per Photo = 2 MB (Original) + 0.05 MB (Thumbnail) = 2.05 MB
+* Daily Storage = 1,000,000 uploads × 2.05 MB = 2,050,000 MB = 2.05 TB/day
+* Yearly Storage = 2.05 TB/day × 365 days = 748.25 TB/year
+
+---
+
+## 3. System Workload Type (Read-Heavy vs Write-Heavy)
+
+The system is **Read-Heavy**. 
+
+With 50,000,000 feed views compared to 1,000,000 photo uploads per day, the read-to-write ratio is 50:1. For the system design, this means we must prioritize caching mechanisms (CDN, Redis) and database read replicas to handle massive read traffic without bottlenecks, while write paths can be processed asynchronously.
+
+---
+
+## 4. Media Storage Strategy
+
+Photos should **not** be stored directly inside relational databases because large binary objects (BLOBs) cause severe database bloat, slow down queries and backups, and dramatically increase infrastructure costs. 
+
+Instead, photo files should be stored in **Object Storage** (e.g., AWS S3 or Google Cloud Storage), which is designed to store unstructured media at high scalability and low cost. The database will only store metadata and text URLs referencing the files stored in object storage.
+
+---
+
+## 5. Architecture Diagram
+mkdir -p day7
+nano day7/photo-app-scaling.md   # paste the text above and save
+git add day7/photo-app-scaling.md
+git commit -m "Day 7 assignment"
+git push
