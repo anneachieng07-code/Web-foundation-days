@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickNotes System Design</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="api.js" defer></script>
+</head>
+<body>
+  <main class="container">
+    <h1>QuickNotes Manager</h1>
+
+    <section class="controls">
+      <button id="load-btn">Load Notes</button>
+      <p id="status" class="status-message" aria-live="polite"></p>
+    </section>
+
+    <section class="form-section">
+      <h2>Create a New Note</h2>
+      <form id="note-form">
+        <div class="form-group">
+          <label for="title-input">Title (Required, max 100 chars):</label>
+          <input type="text" id="title-input" required maxlength="100" placeholder="Enter title...">
+        </div>
+        
+        <div class="form-group">
+          <label for="body-input">Body (Optional):</label>
+          <textarea id="body-input" rows="4" placeholder="Enter note content..."></textarea>
+        </div>
+
+        <button type="submit" id="submit-btn">Create Note</button>
+      </form>
+    </section>
+
+    <section class="notes-section">
+      <h2>Your Notes</h2>
+      <ul id="notes-list"></ul>
+    </section>
+  </main>
+</body>
+</html>
+:root {
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-color: #1e293b;
+  --border-color: #cbd5e1;
+  --error-color: #dc2626;
+  --error-bg: #fef2f2;
+  --success-color: #16a34a;
+  --success-bg: #f0fdf4;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.5;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 700px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+  color: #0f172a;
+  margin-top: 0;
+}
+
+.controls, .form-section {
+  margin-bottom: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+input[type="text"], textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-message {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.status-message.success {
+  background-color: var(--success-bg);
+  color: var(--success-color);
+  border: 1px solid #bbf7d0;
+}
+
+.status-message.error {
+  background-color: var(--error-bg);
+  color: var(--error-color);
+  border: 1px solid #fecaca;
+}
+
+.status-message.info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+#notes-list {
+  list-style: none;
+  padding: 0;
+}
+
+.note-item {
+  background: #f1f5f9;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.note-content {
+  flex-grow: 1;
+  padding-right: 15px;
+}
+
+.note-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.note-content p {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+}
+
+.delete-btn {
+  background-color: var(--error-color);
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.empty-state {
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+const API_URL = 'https://jsonplaceholder.typicode.com/posts';
+
+// DOM Elements
+const loadBtn = document.getElementById('load-btn');
+const statusEl = document.getElementById('status');
+const noteForm = document.getElementById('note-form');
+const titleInput = document.getElementById('title-input');
+const bodyInput = document.getElementById('body-input');
+const submitBtn = document.getElementById('submit-btn');
+const notesList = document.getElementById('notes-list');
+
+// Helper function to update status UI
+function showStatus(message, type = 'info') {
+  statusEl.textContent = message;
+  statusEl.className = `status-message ${type}`;
+}
+
+// Reusable async HTTP request function
+async function request(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(`HTTP Error! Status: ${response.status}`);
+  }
+  // Return empty object for empty 204 or non-json responses if necessary
+  if (response.status === 204) return {};
+  return await response.json();
+}
+
+// Render a single note item using textContent safely
+function renderNoteItem(note) {
+  const li = document.createElement('li');
+  li.className = 'note-item';
+  li.dataset.id = note.id;
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'note-content';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = note.title;
+
+  const p = document.createElement('p');
+  p.textContent = note.body || '(No content)';
+
+  contentDiv.appendChild(h3);
+  contentDiv.appendChild(p);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'delete-btn';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.addEventListener('click', () => deleteNote(note.id, li));
+
+  li.appendChild(contentDiv);
+  li.appendChild(deleteBtn);
+
+  return li;
+}
+
+// GET: Load 10 notes
+async function loadNotes() {
+  loadBtn.disabled = true;
+  showStatus('Loading notes...', 'info');
+
+  try {
+    const notes = await request(`${API_URL}?_limit=10`);
+    notesList.innerHTML = '';
+
+    if (!notes || notes.length === 0) {
+      showStatus('No notes found.', 'info');
+      const emptyLi = document.createElement('li');
+      emptyLi.className = 'empty-state';
+      emptyLi.textContent = 'No notes available. Create one above!';
+      notesList.appendChild(emptyLi);
+      return;
+    }
+
+    notes.forEach(note => {
+      notesList.appendChild(renderNoteItem(note));
+    });
+
+    showStatus('Loaded 10 notes from the server.', 'success');
+  } catch (error) {
+    showStatus(`Failed to load notes: ${error.message}`, 'error');
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+// POST: Create a new note
+async function createNote(event) {
+  event.preventDefault();
+
+  const title = titleInput.value.trim();
+  const body = bodyInput.value.trim();
+
+  // Validation
+  if (!title) {
+    showStatus('Title is required.', 'error');
+    return;
+  }
+  if (title.length > 100) {
+    showStatus('Title must be 100 characters or less.', 'error');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  showStatus('Creating note...', 'info');
+
+  try {
+    const payload = { title, body, userId: 1 };
+    const newNote = await request(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // Remove empty-state message if present
+    const emptyState = notesList.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    // Insert newly created note at the top
+    notesList.prepend(renderNoteItem(newNote));
+
+    showStatus(`Note created (status 201, id ${newNote.id}).`, 'success');
+    noteForm.reset();
+  } catch (error) {
+    showStatus(`Failed to create note: ${error.message}`, 'error');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// DELETE: Remove a note
+/*
+ * NOTE ON JSONPLACEHOLDER BEHAVIOR:
+ * JSONPlaceholder simulates API calls. A DELETE request returns a 200 OK status
+ * with an empty object {}, but does not physically modify server database records.
+ * Therefore, we manually remove the DOM element on a successful 200 response.
+ */
+async function deleteNote(id, element) {
+  const deleteButtons = document.querySelectorAll('.delete-btn');
+  deleteButtons.forEach(btn => btn.disabled = true);
+  showStatus(`Deleting note #${id}...`, 'info');
+
+  try {
+    await request(`${API_URL}/${id}`, { method: 'DELETE' });
+    element.remove();
+    showStatus(`Note #${id} deleted successfully.`, 'success');
+
+    if (notesList.children.length === 0) {
+      const emptyLi = document.createElement('li');
+      emptyLi.className = 'empty-state';
+      emptyLi.textContent = 'No notes remaining.';
+      notesList.appendChild(emptyLi);
+    }
+  } catch (error) {
+    showStatus(`Failed to delete note: ${error.message}`, 'error');
+  } finally {
+    deleteButtons.forEach(btn => btn.disabled = false);
+  }
+}
+
+// Event Listeners
+loadBtn.addEventListener('click', loadNotes);
+noteForm.addEventListener('submit', createNote);
+# QuickNotes REST API Design Document
+
+This document outlines the production RESTful API specification for QuickNotes.
+
+## REST Endpoints Overview
+
+| Method | Path | Description | Success Status |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/notes` | List all notes for the authenticated user | `200 OK` |
+| `POST` | `/api/v1/notes` | Create a new note | `201 Created` |
+| `GET` | `/api/v1/notes/:id` | Fetch details of a single note | `200 OK` |
+| `PUT` | `/api/v1/notes/:id` | Update an existing note completely | `200 OK` |
+| `DELETE` | `/api/v1/notes/:id` | Delete a note by ID | `200 OK` or `204 No Content` |
+| `GET` | `/api/v1/tags` | List all tags created by the user | `200 OK` |
+
+---
+
+## Request & Response JSON Examples
+
+### 1. Create a Note (`POST /api/v1/notes`)
+
+**Request Body:**
+```json
+{
+  "title": "System Architecture Ideas",
+  "body": "Need to decouple background jobs using RabbitMQ.",
+  "tag_ids": [1, 3]
+}
+{
+  "id": 101,
+  "user_id": 42,
+  "title": "System Architecture Ideas",
+  "body": "Need to decouple background jobs using RabbitMQ.",
+  "tags": [
+    { "id": 1, "name": "Architecture" },
+    { "id": 3, "name": "Backend" }
+  ],
+  "created_at": "2026-10-08T10:00:00Z",
+  "updated_at": "2026-10-08T10:00:00Z"
+}
+{
+  "total": 2,
+  "page": 1,
+  "limit": 10,
+  "notes": [
+    {
+      "id": 101,
+      "user_id": 42,
+      "title": "System Architecture Ideas",
+      "body": "Need to decouple background jobs using RabbitMQ.",
+      "tags": ["Architecture", "Backend"],
+      "created_at": "2026-10-08T10:00:00Z"
+    },
+    {
+      "id": 98,
+      "user_id": 42,
+      "title": "Grocery List",
+      "body": "Milk, Eggs, Coffee beans.",
+      "tags": ["Personal"],
+      "created_at": "2026-10-07T14:30:00Z"
+    }
+  ]
+}
+{
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "Title is required and must not exceed 100 characters.",
+    "status": 400,
+    "timestamp": "2026-10-08T10:05:00Z"
+  }
+}
+# QuickNotes System Design & API Client
+
+A full-stack API client implementation and architecture specification for scaling the **QuickNotes** service to 1 million users.
+
+## Project Structure
+
+```text
+quicknotes-system-design/
+├── index.html          # HTML5 interface for notes management
+├── style.css           # Styling for application and status messages
+├── api.js              # Fetch client interacting with JSONPlaceholder API
+├── docs/
+│   ├── api-design.md   # REST API endpoint specification and errors
+│   ├── data-model.md   # PostgreSQL schema, queries, and indexing
+│   └── architecture.md # System architecture, load estimates, and flows
+└── README.md           # Documentation overview
