@@ -1,0 +1,136 @@
+# TicketHub System Design Document
+
+## 1. Requirements
+
+### Functional Requirements
+* **Browse Events:** Users can search and view upcoming concerts and event details.
+* **View Seat Map:** Users can view real-time seat availability for an event.
+* **Hold Seats:** Users can select and temporarily hold a seat for 10 minutes while completing checkout.
+* **Payment Processing:** Users can pay for held seats and complete their purchase.
+* **View Tickets:** Users can view purchased tickets and order histories.
+
+### Non-Functional Requirements
+* **Correctness (Zero Double-Booking):** Under no circumstances can two users purchase or hold the same seat simultaneously.
+* **High Performance & Low Latency:** Seat map and event browsing pages must load in $<300\text{ ms}$.
+* **Fairness:** During high-demand ticket drops, access must be processed first-come, first-served using virtual queuing without crashing.
+* **High Availability & Scalability:** The system must handle normal daily traffic smoothly and scale seamlessly to absorb 40× traffic spikes during major ticket releases.
+
+---
+
+## 2. Capacity & Traffic Estimates
+
+### Starting Facts
+* **Registered Users:** 2,000,000 (2 Million)
+* **Normal Day:** 50,000 visitors, 10 page views/user, 5,000 tickets sold/day.
+* **Big Sale Drop:** 200,000 users attempting to buy 20,000 seats within a 10-minute (600-second) window.
+
+### Normal Day Calculations
+* **Daily Page Views:** 
+  $$50,000 \text{ visitors} \times 10 \text{ pages} = 500,000 \text{ views/day}$$
+* **Average Reads per Second:** 
+  $$\frac{500,000}{86,400 \text{ seconds}} \approx 5.79 \text{ QPS}$$
+* **Average Writes (Ticket Purchases) per Second:** 
+  $$\frac{5,000}{86,400 \text{ seconds}} \approx 0.058 \text{ WPS}$$
+
+### "Big Sale" Peak Calculations (10-Minute Window)
+* **Peak Visitors:** 200,000 users in 600 seconds.
+* **Peak Request Rate (assuming 1 request/sec per user browsing/holding):** 
+  $$\frac{200,000 \text{ users}}{600 \text{ seconds}} \approx 333.33 \text{ requests/sec}$$
+* **Peak Write Attempts (Purchases/Holds over 10 mins):** 
+  $$\frac{200,000 \text{ checkout attempts}}{600 \text{ seconds}} \approx 333.33 \text{ write attempts/sec}$$
+
+### Traffic Comparison
+* **Traffic Multiplier:** Read requests jump from **5.79 QPS** on a normal day to over **333.33 QPS** during a big sale (approx. **57× increase**).
+* **Write Multiplier:** Write traffic jumps from **0.058 WPS** to **333.33 WPS** (approx. **5,700× increase**).
+
+---
+
+## 3. REST API Design
+
+### 1. Browse Events
+* **`GET /api/v1/events`**
+* **Description:** Returns a paginated list of upcoming events.
+* **Success Status:** `200 OK`
+* **Response Payload:**
+  ```json
+  {
+    "events": [
+      {
+        "id": 101,
+        "title": "World Tour Concert",
+        "venue": "National Stadium",
+        "date": "2026-11-15T19:30:00Z"
+      }
+    ]
+  }
+{
+  "event_id": 101,
+  "seats": [
+    { "seat_id": 501, "seat_number": "A12", "status": "AVAILABLE", "price": 120.00 },
+    { "seat_id": 502, "seat_number": "A13", "status": "HELD", "price": 120.00 }
+  ]
+}
+{
+  "hold_id": "h-99812",
+  "seat_id": 501,
+  "expires_at": "2026-10-08T10:35:00Z",
+  "status": "HELD"
+}
+{
+  "hold_id": "h-99812",
+  "payment_method_id": "pm_card_visa"
+}
+{
+  "order_id": 8801,
+  "status": "CONFIRMED",
+  "total_price": 120.00
+}
+{
+  "tickets": [
+    {
+      "order_id": 8801,
+      "event_title": "World Tour Concert",
+      "seat_number": "A12",
+      "qr_code": "[https://tickethub.cdn/qr/8801.png](https://tickethub.cdn/qr/8801.png)"
+    }
+  ]
+}
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE events (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    venue VARCHAR(150) NOT NULL,
+    event_date TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE seats (
+    id SERIAL PRIMARY KEY,
+    event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    seat_number VARCHAR(10) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE', -- AVAILABLE, HELD, BOOKED
+    price DECIMAL(10, 2) NOT NULL,
+    version INT NOT NULL DEFAULT 0,
+    CONSTRAINT unique_event_seat UNIQUE(event_id, seat_number)
+);
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id),
+    seat_id INT UNIQUE NOT NULL REFERENCES seats(id),
+    status VARCHAR(20) NOT NULL, -- PENDING, COMPLETED, EXPIRED
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+UPDATE seats 
+SET status = 'HELD', version = version + 1 
+WHERE id = 501 AND status = 'AVAILABLE';
+mkdir -p day8
+# Save the content above into day8/ticketing-design.md and day8/reflection.md
+git add day8/ticketing-design.md day8/reflection.md
+git commit -m "Day 8 assignment"
+git push
